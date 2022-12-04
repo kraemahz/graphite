@@ -13,6 +13,9 @@ class MainWindow(QMainWindow):
         self.image = None
         self.drawing = False
 
+        self.begin = None
+        self.boxes = []
+
         self.initUI()
 
     def openImage(self):
@@ -22,32 +25,20 @@ class MainWindow(QMainWindow):
             self.drawing = False
             self.update()
 
-    def drawBoxes(self, event):
-        if self.image and self.drawing:
-            x1 = min(self.start_x, event.x())
-            y1 = min(self.start_y, event.y())
-            x2 = max(self.start_x, event.x())
-            y2 = max(self.start_y, event.y())
-
-            self.image_draw.rectangle([(x1, y1), (x2, y2)], outline="red")
-            self.update()
-
     def mousePressEvent(self, event):
-        print("mousePressEvent")
         if event.button() == Qt.LeftButton:
             self.drawing = True
-            self.start_x = event.x()
+            self.begin = event.pos()
             self.start_y = event.y()
 
     def mouseMoveEvent(self, event):
-        print("mouseMoveEvent")
-        self.drawBoxes(event)
+        self.end = event.pos()
 
     def mouseReleaseEvent(self, event):
-        print("mouseReleaseEvent")
         if event.button() == Qt.LeftButton:
-            self.drawBoxes(event)
             self.drawing = False
+            end = event.pos()
+            self.boxes.append((self.begin, end))
 
     def paintEvent(self, event):
         print("paintEvent")
@@ -58,6 +49,11 @@ class MainWindow(QMainWindow):
                                     Qt.KeepAspectRatio,
                                     Qt.SmoothTransformation)
             painter.drawPixmap(0, 0, pix)
+            brush = QBrush(QColor(100, 10, 10, 70))
+            print(self.boxes)
+            for (start, end) in self.boxes:
+                painter.drawRect(QRect(start, end))
+
         painter.end()
 
     def initUI(self):
@@ -75,5 +71,7 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     mw = MainWindow()
+    mw.resize(QSize())
+
     mw.show()
     app.exec_()
