@@ -8,13 +8,13 @@ This was created as an experiment with ChatGPT providing help and snippets of co
 
 ## HowTo
 
-This opens images with `file -> open`. The window will open to a default size but can be resized and the image and all the boxes will scale with it.
+This opens images with `File->Open`. The window will open to a default size but can be resized and the image and all the boxes will scale with it.
 
 Click and drag on the image to make a new box. Green is selected and red is deselected (sorry, colorblind people, modifying it in the code is easy until that's got a dialog).
 
 Click on a box to select it. Click inside a *selected* box to move it. Click the edges of a *selected* box to change its size. Use the *delete* key to remove the box. Use the *enter* key to add text to a box, a window will pop up.
 
-After you are done annotating, File->Save will bring up a new menu to name a new file or replace the old one.
+After you are done annotating, `File->Save` will bring up a new menu to name a new file or replace the old one.
 
 ## Test image
 
