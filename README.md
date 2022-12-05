@@ -5,5 +5,8 @@ This is a PyQt image annotation software that allows adding text annotations to 
 This was created as an experiment with ChatGPT providing help and snippets of code to get started. ChatGPT did write the initial start of the code, however there was significant human debugging and refactoring through the process (and I quickly gave up trying to get it to write *all* the code).
 
 ## Test image
+
+![](https://github.com/kraemahz/graphite/blob/main/demo.gif)
+
 *When and Why Did Human Brains Decrease in Size? A New Change-Point Analysis and Insights From Brain Evolution in Ants*
 2021 DeSilva, Traniello, Claxton and Fannin. (CC BY)

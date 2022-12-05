@@ -39,7 +39,7 @@ QRect.setCorner = set_corner
 
 
 def create_text_box(box):
-    text, ok = QInputDialog.getText(None, "Content Entry", "Enter the language content in this box")
+    text, ok = QInputDialog.getText(None, "Content Entry", "Enter the language content in this box", text=getattr(box, 'text', ''))
     if ok:
         box.text = text
 
