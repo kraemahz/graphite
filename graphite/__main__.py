@@ -248,8 +248,8 @@ class MainWindow(QMainWindow):
                                     Qt.SmoothTransformation)
             self.current_size = pix.rect().size()
             painter.drawPixmap(0, self.fheight, pix)
-            brush = QBrush(QColor(200, 10, 10, 30))
-            selected_brush = QBrush(QColor(0, 200, 10, 30))
+            brush = QBrush(QColor(120, 10, 120, 30))
+            selected_brush = QBrush(QColor(200, 200, 10, 30))
 
             for i, rect in enumerate(self.boxes):
                 scaled_rect = self.scale_rect(rect)
