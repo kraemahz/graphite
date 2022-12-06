@@ -117,7 +117,10 @@ class MainWindow(QMainWindow):
 
             json_str = json.dumps(self.boxes_dict())
             im = Image.open(self.name)
-            exif = piexif.load(im.info["exif"])
+            try:
+                exif = piexif.load(im.info["exif"])
+            except KeyError:
+                exif = {"Exif": {}}
             exif["Exif"][TAG_KEY] = json_str.encode("utf-8")
             exif_bytes = piexif.dump(exif)
             im.save(file_name, quality=100, exif=exif_bytes)
