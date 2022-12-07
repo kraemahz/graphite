@@ -11,38 +11,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-def box_corner(box, corner) -> QPoint:
-    if corner == Qt.TopLeftCorner:
-        return box.topLeft()
-    elif corner == Qt.TopRightCorner:
-        return box.topRight()
-    elif corner == Qt.BottomRightCorner:
-        return box.bottomRight()
-    elif corner == Qt.BottomLeftCorner:
-        return box.bottomLeft()
-
-
-def set_corner(box, corner, point):
-    # Set the position of the specified corner of the rectangle
-    if corner == Qt.TopLeftCorner:
-        box.setTopLeft(point)
-    elif corner == Qt.TopRightCorner:
-        box.setTopRight(point)
-    elif corner == Qt.BottomLeftCorner:
-        box.setBottomLeft(point)
-    elif corner == Qt.BottomRightCorner:
-        box.setBottomRight(point)
-
-
-QRect.corner = box_corner
-QRect.setCorner = set_corner
-
-
-def create_text_box(box):
-    text, ok = QInputDialog.getText(None, "Content Entry", "Enter the language content in this box", text=getattr(box, 'text', ''))
-    if ok:
-        box.text = text
-
+from .boxes import *
 
 class MainWindow(QMainWindow):
 
@@ -91,21 +60,34 @@ class MainWindow(QMainWindow):
     def from_json_boxes(self, json_obj):
         boxes = json_obj["boxes"]
         for b in boxes:
-            top_left = b["top_left"]
-            bottom_right = b["bottom_right"]
-            box = QRect(QPoint(*top_left), QPoint(*bottom_right))
-            box.text = b["text"]
-            self.boxes.append(box)
+            if "points" in b:
+                points = [QPoint(*p) for p in b["points"]]
+                poly = QPolygon(points)
+                poly.text = b["text"]
+                self.boxes.append(poly)
+            else:
+                top_left = b["top_left"]
+                bottom_right = b["bottom_right"]
+                box = QRect(QPoint(*top_left), QPoint(*bottom_right))
+                box.text = b["text"]
+                self.boxes.append(box)
 
     def boxes_dict(self):
         retval = {}
         retval["boxes"] = []
         for b in self.boxes:
-            top_left = b.topLeft()
-            bottom_right = b.bottomRight()
-            box_obj = {"top_left": (top_left.x(), top_left.y()),
-                       "bottom_right": (bottom_right.x(), bottom_right.y()),
-                       "text": b.text if hasattr(b, "text") else ""}
+            if isinstance(b, QRect):
+                top_left = b.topLeft()
+                bottom_right = b.bottomRight()
+                box_obj = {"top_left": (top_left.x(), top_left.y()),
+                           "bottom_right": (bottom_right.x(), bottom_right.y()),
+                           "text": getattr(b, "text", "")}
+            elif isinstance(b, QPolygon):
+                points = []
+                for i in range(b.size()):
+                    point = b.at(i)
+                    points.append((point.x(), point.y()))
+                box_obj = {"points": points, "text": getattr(b, "text", "")}
             retval["boxes"].append(box_obj)
         return retval
 
@@ -130,6 +112,7 @@ class MainWindow(QMainWindow):
             return
 
         if self.selected is not None:
+            box = self.boxes[self.selected]
             if event.key() == Qt.Key_Delete:
                 del self.boxes[self.selected]
                 self.update()
@@ -138,7 +121,17 @@ class MainWindow(QMainWindow):
                 else:
                     self.selected = None
             elif event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
-                create_text_box(self.boxes[self.selected])
+                box.setText()
+                self.update()
+            elif event.key() == Qt.Key_F:
+                if isinstance(box, QRect):
+                    self.boxes[self.selected] = rect_to_poly(box)
+                elif isinstance(box, QPolygon):
+                    self.boxes[self.selected] = poly_to_rect(box)
+                self.update()
+            elif event.key() == Qt.Key_A and isinstance(box, QPolygon):
+                pos = QCursor.pos()
+                box.append(self.realPoint(pos))
                 self.update()
 
     def realPoint(self, point):
@@ -153,15 +146,15 @@ class MainWindow(QMainWindow):
         y_fract = (y - self.fheight) / self.current_size.height()
         return int(self.image.height() * y_fract)
 
-    def scale_rect(self, rect: QRect) -> QRect:
+    def scale_point(self, p: QPoint) -> QPoint:
         x_scale = self.current_size.width() / self.image.width()
         y_scale = self.current_size.height() / self.image.height()
+        return QPoint(int(p.x() * x_scale), int(p.y() * y_scale) + self.fheight) 
 
+    def scale_rect(self, rect: QRect) -> QRect:
         top_left = rect.topLeft()
         bottom_right = rect.bottomRight()
-
-        return QRect(QPoint(int(top_left.x() * x_scale), int(top_left.y() * y_scale) + self.fheight),
-                     QPoint(int(bottom_right.x() * x_scale), int(bottom_right.y() * y_scale) + self.fheight))
+        return QRect(self.scale_point(top_left), self.scale_point(bottom_right))
 
     def mousePressEvent(self, event):
         if self.image is None:
@@ -175,19 +168,33 @@ class MainWindow(QMainWindow):
             corner_y = max(3, self.y_scale(3 + self.fheight))
 
             if self.selected is not None:
-                rect = self.boxes[self.selected]
-                if rect.contains(point):
-                    self.mode = "move"
-                for corner in [Qt.TopLeftCorner, Qt.TopRightCorner,
-                               Qt.BottomLeftCorner, Qt.BottomRightCorner]:
-                    corner_p = rect.corner(corner)
-                    corner_box = QRect(corner_p + QPoint(-corner_x, -corner_y),
-                                       corner_p + QPoint(corner_x, corner_y))
+                box = self.boxes[self.selected]
+                if isinstance(box, QRect):
+                    rect = box
+                    if rect.contains(point):
+                        self.mode = "move"
+                    for corner in [Qt.TopLeftCorner, Qt.TopRightCorner,
+                                   Qt.BottomLeftCorner, Qt.BottomRightCorner]:
+                        corner_p = rect.corner(corner)
+                        corner_box = QRect(corner_p + QPoint(-corner_x, -corner_y),
+                                           corner_p + QPoint(corner_x, corner_y))
 
-                    if corner_box.contains(point):
-                        self.mode = "resize"
-                        self.corner = corner
-                        break
+                        if corner_box.contains(point):
+                            self.mode = "resize"
+                            self.corner = corner
+                            break
+                elif isinstance(box, QPolygon):
+                    if box.containsPoint(point, Qt.OddEvenFill):
+                        self.mode = "move"
+
+                    for i in range(box.size()):
+                        corner_p = box.at(i)
+                        corner_box = QRect(corner_p + QPoint(-corner_x, -corner_y),
+                                           corner_p + QPoint(corner_x, corner_y))
+                        if corner_box.contains(point):
+                            self.mode = "resize"
+                            self.corner = i
+                            break
 
             self.pending = [point, point]
             if self.mode == "draw":
@@ -202,14 +209,22 @@ class MainWindow(QMainWindow):
 
         if self.mode == "draw":
             self.boxes[-1] = QRect(*self.pending)
-        elif self.mode == "move":
+        elif self.selected is not None:
             box = self.boxes[self.selected]
-            diff = self.pending[1] - self.pending[0]
-            box.translate(diff)
-            self.pending[0] = point
-        elif self.mode == "resize":
-            box = self.boxes[self.selected]
-            box.setCorner(self.corner, point)
+            if isinstance(box, QRect):
+                if self.mode == "move":
+                    diff = self.pending[1] - self.pending[0]
+                    box.translate(diff)
+                    self.pending[0] = point
+                elif self.mode == "resize":
+                    box.setCorner(self.corner, point)
+            elif isinstance(box, QPolygon):
+                if self.mode == "move":
+                    diff = self.pending[1] - self.pending[0]
+                    box.translate(diff)
+                    self.pending[0] = point
+                elif self.mode == "resize":
+                    box.setPoint(self.corner, self.pending[1])
 
         self.update()
 
@@ -226,9 +241,11 @@ class MainWindow(QMainWindow):
                 if diff.manhattanLength() < 1:
                     self.boxes.pop()
                     selected_candidates = []
-                    for i, rect in enumerate(self.boxes):
-                        if rect.contains(point):
-                            selected_candidates.append((rect, i))
+                    for i, box in enumerate(self.boxes):
+                        if isinstance(box, QPolygon) and box.containsPoint(point, Qt.OddEvenFill):
+                            selected_candidates.append((box, i))
+                        elif box.contains(point):
+                            selected_candidates.append((box, i))
 
                     if len(selected_candidates) > 1:
                         self.selected = biggest_intersecting_fraction(selected_candidates)[1]
@@ -254,16 +271,29 @@ class MainWindow(QMainWindow):
             brush = QBrush(QColor(120, 10, 120, 30))
             selected_brush = QBrush(QColor(200, 200, 10, 30))
 
-            for i, rect in enumerate(self.boxes):
-                scaled_rect = self.scale_rect(rect)
+            for i, box in enumerate(self.boxes):
                 if i == self.selected:
                     painter.setBrush(selected_brush)
-                    if hasattr(rect, "text"):
-                        painter.drawText(scaled_rect, Qt.AlignCenter, rect.text)
                 else:
                     painter.setBrush(brush)
 
-                painter.drawRect(scaled_rect)
+                if isinstance(box, QRect):
+                    rect = box
+                    scaled_rect = self.scale_rect(rect)
+                    text = getattr(rect, "text", "")
+
+                    painter.drawRect(scaled_rect)
+                elif isinstance(box, QPolygon):
+                    poly = box
+                    new_poly = QPolygon()
+                    for ix in range(poly.size()):
+                        new_poly.append(self.scale_point(poly.at(ix)))
+                    text = getattr(poly, "text", "")
+                    scaled_rect = new_poly.boundingRect()
+                    painter.drawConvexPolygon(new_poly)
+
+                if i == self.selected:
+                    painter.drawText(scaled_rect, Qt.AlignCenter, text)
 
         painter.end()
 
@@ -281,26 +311,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(QWidget())
         self.centralWidget().setMouseTracking(True)
         return menu_bar.height() - 10  # ??? The value is wrong
-
-
-def biggest_intersecting_fraction(boxes):
-    max_intersection = None
-    for i, (r1, index) in enumerate(boxes):
-        for j, (r2, _)  in enumerate(boxes):
-            if j == i:
-                continue
-            inter = r1.intersected(r2)
-
-            s = inter.size()
-            s2 = r1.size()
-
-            area_fract = (s.height() * s.width()) / (s2.height() * s2.width())
-
-            if max_intersection is None:
-                max_intersection = (area_fract, index)
-            elif area_fract > max_intersection[0]:
-                max_intersection = (area_fract, index)
-    return max_intersection
 
 
 if __name__ == "__main__":

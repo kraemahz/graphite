@@ -1,5 +1,5 @@
 name = 'graphite'
-version = '1.0.1'
+version = '1.1.0'
 author = 'Teague Lasser'
 author_email = 'contact@teague.info'
 maintainer = 'Teague Lasser'
