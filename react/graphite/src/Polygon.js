@@ -108,7 +108,7 @@ export function biggestIntersectingFraction(boxes: Array<[number, Polygon]>) {
   for (let i = 0; i < boxes.length; i++) {
     let [index1, box1] = boxes[i];
     let rect1 = box1.boundingRect();
-    let rect1_area = box1.area();
+    let rect1_area = rect1.area();
 
     for (let j = 0; j < boxes.length; j++) {
       if (j === i) { continue; }
@@ -116,7 +116,7 @@ export function biggestIntersectingFraction(boxes: Array<[number, Polygon]>) {
       let rect2 = box2.boundingRect();
       let intersect = rect1.getIntersection(rect2);
       if (intersect) {
-        let rect2_area = box2.area();
+        let rect2_area = rect2.area();
 
         let inter_area = intersect.area();
         console.log("inter", intersect);
