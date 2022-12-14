@@ -166,6 +166,7 @@ export default class Diagram extends React.Component {
     this.image.onload = this.redrawImage;
     this.image.src = this.imageSrc;
     this.boxes = [];
+    this.selected = null;
   };
 
   redrawImage = () => {
