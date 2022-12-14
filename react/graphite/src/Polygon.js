@@ -27,6 +27,7 @@ export class Polygon {
 
   constructor(vertices: Point[]) {
     this.vertices = vertices;
+    this.text = "";
   }
 
   translate(diff: Point) {

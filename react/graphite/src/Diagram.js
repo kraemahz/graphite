@@ -1,9 +1,9 @@
 // import ColorPicker, { useColor } from "react-color-palette";
 import PropTypes from "prop-types";
 import React, {useRef} from 'react';
-import CoordinateSystem from "./CoordinateSystem";
 import drawImageExtents from "./drawImage";
 import {Point, Polygon, Rectangle, biggestIntersectingFraction} from "./Polygon";
+import Modal from './Modal';
 
 function midPointBtw(p1, p2) {
   return {
@@ -64,11 +64,6 @@ export default class Diagram extends React.Component {
 
     this.canvas = {};
     this.ctx = {};
-    this.coordSystem = new CoordinateSystem ({
-      scaleExtents: props.zoomExtents,
-      documentSize: { width: props.canvasWidth, height: props.canvasHeight },
-    });
-
     this.mouseHasMoved = true;
     this.valuesChanged = true;
 
@@ -79,11 +74,13 @@ export default class Diagram extends React.Component {
     this.scale = 1.0;
     this.lastKeyTimeStamp = 0;
     this.cursorPositon = new Point(0, 0);
+    this.state = {
+      enteringText: "",
+      modalIsVisible: false, 
+    };
 
-    this.state = {enteringText: "", modalIsOpen: false};
     this.imageSrc = this.props.imageSrc;
     this.fileInput = React.createRef();
-    this.inputRef = React.createRef();
   }
 
   componentDidMount() {
@@ -94,43 +91,40 @@ export default class Diagram extends React.Component {
     this.extentsWidth = this.props.canvasWidth;
     this.extentsHeight = this.props.canvasHeight;
 
-    let deleteBox = debounce(() => {
-      if (!this.state.modalIsOpen) {
-        this.boxes.splice(this.selected, 1);
+    let deleteBox = debounce((visible, selected) => {
+      if (!visible && selected !== null) {
+        this.boxes.splice(selected, 1);
         this.selected = null;
         this.redrawPolygons();
       }
     }, 300);
 
-    let addPoint = debounce(() => {
-      if (!this.state.modalIsOpen) {
-        let box = this.boxes[this.selected];
+    let addPoint = debounce((visible, selected) => {
+      if (!visible && selected !== null) {
+        let box = this.boxes[selected];
         if (box instanceof Polygon) {
-          this.boxes[this.selected].vertices.push(this.cursorPositon);
+          this.boxes[selected].vertices.push(this.cursorPositon);
         }
         this.redrawPolygons();
       }
     }, 300);
 
-    let togglePolygon = debounce(() => {
-      if (!this.state.modalIsOpen) {
-        let box = this.boxes[this.selected];
+    let togglePolygon = debounce((visible, selected) => {
+      if (!visible && selected !== null) {
+        let box = this.boxes[selected];
         if (box instanceof Rectangle) {
-          this.boxes[this.selected] = new Polygon(box.vertices);
+          this.boxes[selected] = new Polygon(box.vertices);
         } else {
-          this.boxes[this.selected] = box.boundingRect();
+          this.boxes[selected] = box.boundingRect();
         }
         this.redrawPolygons();
       }
     }, 300);
 
-    let setBoxText = debounce(() => {
-      if (this.state.modalIsOpen) {
-        this.enterText({preventDefault: () => null});
-      } else {
-        let box = this.boxes[this.selected];
-        this.setState({enteringText: box.text, modalIsOpen: true});
-        console.log(this.inputRef);
+    let setBoxText = debounce((visible, selected) => {
+      if (!visible) {
+        let box = this.boxes[selected];
+        this.setState({modalIsVisible: true});
       }
     }, 300);
 
@@ -138,13 +132,13 @@ export default class Diagram extends React.Component {
       if (this.selected !== null && event.timeStamp !== this.lastKeyTimeStamp) {
         this.lastKeyTimeStamp = event.timeStamp;
         if (event.key === "Delete" || event.key === "Backspace") {
-          deleteBox();
+          deleteBox(this.state.modalIsVisible, this.selected);
         } else if (event.key === "a") {
-          addPoint();
+          addPoint(this.state.modalIsVisible, this.selected);
         } else if (event.key === "f") {
-          togglePolygon();
+          togglePolygon(this.state.modalIsVisible, this.selected);
         } else if (event.key === "Enter") {
-          setBoxText();
+          setBoxText(this.state.modalIsVisible, this.selected);
         }
       }
     });
@@ -235,8 +229,6 @@ export default class Diagram extends React.Component {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         this.resizeAllCanvases(width, height);
-        this.coordSystem.documentSize = { width, height };
-
         this.drawImage();
       }
     } finally {
@@ -306,6 +298,13 @@ export default class Diagram extends React.Component {
     this.cursorPositon = point;
   }
 
+  updateBoxText = (text) => {
+    if (this.selected !== null) {
+      this.boxes[this.selected].text = text;
+    }
+    this.setState({modalIsVisible: false, enteringText: text});
+  }
+
   handleDrawEnd = (e) => {
     let canvas = this.canvas.interface
     this.ctx.interface.clearRect(0, 0, canvas.width, canvas.height);
@@ -330,14 +329,13 @@ export default class Diagram extends React.Component {
         } else if (selected_candidates.length === 1) {
           this.selected = selected_candidates[0][0];
         }
-
+        const box = this.boxes[this.selected];
+        this.setState({modalIsVisible: false, enteringText: box.text});
       } else {
         // Select the newly created rectangle.
         this.selected = this.boxes.length - 1;
+        this.setState({modalIsVisible: false, enteringText: ""});
       }
-      let text = this.selected.text? this.selected.text : "";
-      console.log(text);
-      this.setState({enteringText: text});
     }
 
     this.mode = "";
@@ -346,38 +344,14 @@ export default class Diagram extends React.Component {
     this.redrawPolygons();
   }
 
-  enterText = (event) => {
-    event.preventDefault();
-    this.boxes[this.selected].text = this.state.enteringText;
-    this.setState({enteringText: "", modalIsOpen: false});
-  }
-  
-  updateText = (event) => {
-    this.setState({enteringText: event.target.value});
-  }
-
   render() {
     return (
       <div className={this.props.className}>
         <div>
           <input type="file" ref={this.fileInput} onChange={this.handleFileChange} />
           <button onClick={this.saveData}>Save</button>
-          {this.state.modalIsOpen && (
-            <div className="text_modal" style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 999,
-              background: 'white',
-              padding: '20px',
-            }}>
-              <form onSubmit={this.enterText}>
-                <input type="text" ref={this.inputRef} value={this.state.enteringText} onChange={this.updateText}/>
-                <input type="submit" value="Submit" />
-              </form>
-            </div>
-          )}
+          {this.state.modalIsVisible &&
+            <Modal enteringText={this.state.enteringText} setBoxText={this.updateBoxText} />}
         </div>
         <div
           ref={(container) => {
@@ -402,7 +376,6 @@ export default class Diagram extends React.Component {
                   if (canvas) {
                     this.canvas[name] = canvas;
                     this.ctx[name] = canvas.getContext("2d");
-                    this.coordSystem.canvas = canvas;
                   }
                 }}
                 style={{ ...canvasStyle }}
