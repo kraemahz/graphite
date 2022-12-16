@@ -4,6 +4,7 @@ import React, {useRef} from 'react';
 import drawImageExtents from "./drawImage";
 import {Point, Polygon, Rectangle, biggestIntersectingFraction} from "./Polygon";
 import Modal from './Modal';
+import * as EXIF from './exif';
 
 function midPointBtw(p1, p2) {
   return {
@@ -123,7 +124,6 @@ export default class Diagram extends React.Component {
 
     let setBoxText = debounce((visible, selected) => {
       if (!visible) {
-        let box = this.boxes[selected];
         this.setState({modalIsVisible: true});
       }
     }, 300);
@@ -165,8 +165,34 @@ export default class Diagram extends React.Component {
     // Draw the image once loaded
     this.image.onload = this.redrawImage;
     this.image.src = this.imageSrc;
+
+    let imgWidth = this.image.width;
+    let imgHeight = this.image.height;
+
+    let metadata;
+    let worked = EXIF.getData(this.image, function() {
+      metadata = JSON.parse(EXIF.getTag(this, "Metadata"));
+    });
+
     this.boxes = [];
     this.selected = null;
+
+    if (metadata) {
+      for (let i = 0; i < metadata.boxes.length; i++) {
+        let box = metadata.boxes[i];
+        if ('points' in box) { // Corners for rectangle
+          let poly = new Polygon(box.points);
+          poly.text = box.text;
+          this.boxes.push(poly);
+        } else {
+          let rect = new Rectangle(new Point(box.top_left[0], box.top_left[1]),
+                                   new Point(box.bottom_right[0], box.bottom_right[1]));
+          rect.text = box.text;
+          this.boxes.push(rect);
+        }
+      }
+    }
+    console.log(this.boxes);
   };
 
   redrawImage = () => {
@@ -279,22 +305,28 @@ export default class Diagram extends React.Component {
   handleDrawMove = (e) => {
     let canvas = this.canvas.interface;
     let point = pointFromEvent(e, canvas);
-    if (this.mode !== "") {
-      if (this.mode === "draw") {
-        let box = this.boxes[this.boxes.length - 1];
+    if (this.mode === "draw") {
+      let box = this.boxes[this.boxes.length - 1];
+      if (box) {
         box.setBottomRight(point);
-      } else if (this.mode === "move") {
-        let diff = point.diff(this.lastPoint);
-        let box = this.boxes[this.selected];
+        this.redrawPolygons();
+      }
+    } else if (this.mode === "move") {
+      let diff = point.diff(this.lastPoint);
+      let box = this.boxes[this.selected];
+      if (box) {
         box.translate(diff);
         this.lastPoint = point;
-      } else if (this.mode === "resize") {
-        let diff = point.diff(this.lastPoint);
-        let box = this.boxes[this.selected];
+        this.redrawPolygons();
+      }
+    } else if (this.mode === "resize") {
+      let diff = point.diff(this.lastPoint);
+      let box = this.boxes[this.selected];
+      if (box) {
         this.corner = box.translatePoint(diff, this.corner);
         this.lastPoint = point;
+        this.redrawPolygons();
       }
-      this.redrawPolygons();
     }
     this.cursorPositon = point;
   }
@@ -331,7 +363,9 @@ export default class Diagram extends React.Component {
           this.selected = selected_candidates[0][0];
         }
         const box = this.boxes[this.selected];
-        this.setState({modalIsVisible: false, enteringText: box.text});
+        if (box) {
+          this.setState({modalIsVisible: false, enteringText: box.text});
+        }
       } else {
         // Select the newly created rectangle.
         this.selected = this.boxes.length - 1;
