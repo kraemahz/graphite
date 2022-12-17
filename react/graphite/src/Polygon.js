@@ -7,7 +7,7 @@ export class Point {
     this.y = y;
   }
 
-  diff = (other:Point): Point => {
+  diff = (other: Point): Point => {
     return new Point(this.x - other.x, this.y - other.y);
   }
 
@@ -62,7 +62,6 @@ export class Polygon {
         intersections++;
       }
     }
-
     // If the number of intersections is odd, the point is inside the polygon
     return intersections % 2 === 1;
   }
@@ -75,6 +74,8 @@ export class Polygon {
     }
     // Check if the ray intersects with the line segment
     const t = (p1.x + (p2.y - p1.y) * (r.x - p.x) / (r.y - p.y) - p.x) / (p2.x - p1.x);
+    console.log("ris", t);
+
     return t >= 0 && t <= 1;
   }
 
@@ -102,6 +103,14 @@ export class Polygon {
 
     return new Rectangle(xmin, ymin, xmax, ymax);
   }
+
+  scale = (func) => {
+    let vertices = [];
+    for (let i = 0; i < this.vertices.length; i++) {
+      vertices.push(func(this.vertices[i]));
+    }
+    return new Polygon(vertices);
+  };
 }
 
 export function biggestIntersectingFraction(boxes: Array<[number, Polygon]>) {
@@ -120,15 +129,12 @@ export function biggestIntersectingFraction(boxes: Array<[number, Polygon]>) {
         let rect2_area = rect2.area();
 
         let inter_area = intersect.area();
-        console.log("inter", intersect);
         let a1 = rect1_area / inter_area;
         let a2 = rect2_area / inter_area;
         
         if (a1 >= a2 || !max_intersection || a1 > max_intersection[1]) {
-          console.log("a1", a1);
           max_intersection = [index1, box1];
         } else if (!max_intersection || a2 > max_intersection[1]) {
-          console.log("a2", a2);
           max_intersection = [index1, box1];
           max_intersection = [index2, box2];
         }
@@ -233,7 +239,7 @@ export class Rectangle extends Polygon {
       new Point(right, bottom),
       new Point(left, bottom)
     ];
-  };
+  }
 
   width() {
     return this.vertices[1].x - this.vertices[0].x
@@ -247,13 +253,20 @@ export class Rectangle extends Polygon {
     return this;
   }
 
+  scale = (func): Rectangle => {
+    let tl = func(this.vertices[0]);
+    let br = func(this.vertices[2]);
+    return new Rectangle(tl, br);
+  }
+
   contains(point: Point): bool {
     let left = this.vertices[0].x;
     let right = this.vertices[1].x;
     let top = this.vertices[0].y;
     let bottom = this.vertices[2].y;
-    return ((point.x >= left && point.x <= right) &&
+    let has_point = ((point.x >= left && point.x <= right) &&
       (point.y >= top && point.y <= bottom));
+    return has_point;
   }
 
   area() {

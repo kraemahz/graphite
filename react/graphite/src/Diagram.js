@@ -1,17 +1,11 @@
-// import ColorPicker, { useColor } from "react-color-palette";
 import PropTypes from "prop-types";
 import React, {useRef} from 'react';
 import drawImageExtents from "./drawImage";
 import {Point, Polygon, Rectangle, biggestIntersectingFraction} from "./Polygon";
 import Modal from './Modal';
-import * as EXIF from './exif';
+import {midPointBtw, Coordinates} from "./Coordinates";
+import * as piexif from "./piexif";
 
-function midPointBtw(p1, p2) {
-  return {
-    x: p1.x + (p2.x - p1.x) / 2,
-    y: p1.y + (p2.y - p1.y) / 2,
-  };
-}
 
 const canvasStyle = {
   display: "block",
@@ -81,6 +75,7 @@ export default class Diagram extends React.Component {
     };
 
     this.imageSrc = this.props.imageSrc;
+    this.exifData = {"Exif": {}};
     this.fileInput = React.createRef();
   }
 
@@ -148,13 +143,47 @@ export default class Diagram extends React.Component {
   }
 
   saveData = () => {
-    console.log("TODO");
+    let blob = {"boxes": []};
+    for (let i = 0; i < this.boxes.length; i++) {
+      let box = this.boxes[i];
+      if (box instanceof Rectangle) {
+        let tl = box.vertices[0];
+        let br = box.vertices[2];
+        blob["boxes"].push(
+          {"top_left": [tl.x, tl.y], "bottom_right": [br.x, br.y], "text": box.text}
+        );
+      } else {
+        let points = [];
+        for (let i = 0; i < box.vertices.length; i++) {
+          let point = box.vertices[i];
+          points.push([point.x, point.y]);
+        }
+        blob["boxes"].push(
+          {"points": points, "text": box.text}
+        );
+      }
+    }
+
+    let json_blob = JSON.stringify(blob);
+    this.exifData["Exif"]["65000"] = json_blob;
+    const exifString = piexif.dump(this.exifData);
+    const newSrc = piexif.insert(exifString, this.image.src);
+
+    // Do some horrific DOM manipulation. Seriously look away, this is gross.
+    const anchor = document.createElement('a');
+    anchor.href = newSrc;
+    anchor.download = "result.jpg";
+    anchor.click();
   }
   
   /// Canvas rendering
 
   drawImage = () => {
     if (!this.imageSrc) return;
+
+    // Clear stored data
+    this.boxes = [];
+    this.selected = null;
 
     // Load the image
     this.image = new Image();
@@ -166,33 +195,34 @@ export default class Diagram extends React.Component {
     this.image.onload = this.redrawImage;
     this.image.src = this.imageSrc;
 
-    let imgWidth = this.image.width;
-    let imgHeight = this.image.height;
-
-    let metadata;
-    let worked = EXIF.getData(this.image, function() {
-      metadata = JSON.parse(EXIF.getTag(this, "Metadata"));
-    });
-
-    this.boxes = [];
-    this.selected = null;
+    this.exifData = piexif.load(this.image.src);
+    let blob = this.exifData["Exif"]["65000"];
+    if (!blob) {
+      return;
+    }
+    let metadata = JSON.parse(blob);
 
     if (metadata) {
       for (let i = 0; i < metadata.boxes.length; i++) {
         let box = metadata.boxes[i];
         if ('points' in box) { // Corners for rectangle
-          let poly = new Polygon(box.points);
+          let points = [];
+          for (let i = 0; i < box.points.length; i++) {
+            let point = box.points[i];
+            points.push(new Point(point[0], point[1]));
+          }
+          let poly = new Polygon(points);
           poly.text = box.text;
           this.boxes.push(poly);
         } else {
           let rect = new Rectangle(new Point(box.top_left[0], box.top_left[1]),
                                    new Point(box.bottom_right[0], box.bottom_right[1]));
+          rect.sortPoints();
           rect.text = box.text;
           this.boxes.push(rect);
         }
       }
     }
-    console.log(this.boxes);
   };
 
   redrawImage = () => {
@@ -202,12 +232,22 @@ export default class Diagram extends React.Component {
       let [w, h] = drawImageExtents({ ctx: this.ctx.grid, img: this.image });
       // fill image in dest. rectangle
       this.resizeAllCanvases(w, h);
+      this.coords = new Coordinates(
+        this.image.width,
+        this.image.height,
+        w,
+        h
+      );
       this.ctx.grid.drawImage(this.image, 0, 0, w, h);
       this.redrawPolygons();
     }
   };
 
   redrawPolygons = () => {
+    if (!this.coords) {
+      return;
+    }
+
     let canvas = this.canvas.drawing;
     let ctx = this.ctx.drawing;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -218,7 +258,7 @@ export default class Diagram extends React.Component {
       } else {
         ctx.fillStyle = 'rgba(238, 144, 238, 0.3)';
       }
-      let box = this.boxes[i];
+      let box = this.coords.to_display_poly(this.boxes[i]);
       ctx.beginPath();
       let firstPoint = box.vertices[0];
       ctx.moveTo(firstPoint.x, firstPoint.y);
@@ -271,8 +311,12 @@ export default class Diagram extends React.Component {
   };
 
   handleDrawStart = (e) => {
+    if (!this.coords) {
+      return;
+    }
+
     const canvas = this.canvas.interface;
-    const point = pointFromEvent(e, canvas);
+    const point = pointFromEvent(e, canvas, this.coords);
     const context = this.ctx.interface;
 
     // Extents edge
@@ -303,8 +347,12 @@ export default class Diagram extends React.Component {
   }
 
   handleDrawMove = (e) => {
+    if (!this.coords) {
+      return;
+    }
+
     let canvas = this.canvas.interface;
-    let point = pointFromEvent(e, canvas);
+    let point = pointFromEvent(e, canvas, this.coords);
     if (this.mode === "draw") {
       let box = this.boxes[this.boxes.length - 1];
       if (box) {
@@ -339,9 +387,13 @@ export default class Diagram extends React.Component {
   }
 
   handleDrawEnd = (e) => {
+    if (!this.coords) {
+      return;
+    }
+
     let canvas = this.canvas.interface
     this.ctx.interface.clearRect(0, 0, canvas.width, canvas.height);
-    let point = pointFromEvent(e, canvas);
+    let point = pointFromEvent(e, canvas, this.coords);
 
     if (this.mode === "draw") {
       let dist = this.lastPoint.manhattanDistance(point);
@@ -441,10 +493,11 @@ export class SyntheticEvent {
   preventDefault = () => {};
 }
 
-export function pointFromEvent(e, canvas) {
+export function pointFromEvent(e, canvas, coords) {
     const rect = canvas.getBoundingClientRect();
     let point = clientPointFromEvent(e);
-    return new Point(point.x - rect.left, point.y - rect.top);
+    let p = new Point(point.x - rect.left, point.y - rect.top);
+    return coords.from_display_point(p);
 }
 
 export function clientPointFromEvent(e) {
