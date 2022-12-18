@@ -74,7 +74,6 @@ export class Polygon {
     for (let i = 0; i < this.vertices.length; i++) {
       const p1 = this.vertices[i];
       const p2 = this.vertices[(i + 1) % this.vertices.length];
-      console.log([point.x, point.y], [p1.x, p1.y], [p2.x, p2.y]);
 
       // Check if the ray intersects with the current edge
       if (this.rayIntersectsSegment(point, ray, p1, p2)) {
