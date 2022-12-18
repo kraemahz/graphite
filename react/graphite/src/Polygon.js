@@ -19,7 +19,25 @@ export class Point {
   near = (other: Point, dist: number) => {
     return this.manhattanDistance(other) < dist;
   }
+
+  dot = (other: Point): number => {
+    return this.x * other.x + this.y * other.y
+  }
+
+  cross = (other: Point): number => {
+    return this.x * other.y - this.y * other.x;
+  }
+
+  slope = (other: Point): number => {
+    return (other.y - this.y) / (other.x - this.x);
+  }
+
+  offset = (other: Point): number => {
+    let s = this.slope(other);
+    return this.y - s * this.x
+  }
 }
+
 
 // Represents convex polygons on the canvas
 export class Polygon {
@@ -56,6 +74,7 @@ export class Polygon {
     for (let i = 0; i < this.vertices.length; i++) {
       const p1 = this.vertices[i];
       const p2 = this.vertices[(i + 1) % this.vertices.length];
+      console.log([point.x, point.y], [p1.x, p1.y], [p2.x, p2.y]);
 
       // Check if the ray intersects with the current edge
       if (this.rayIntersectsSegment(point, ray, p1, p2)) {
@@ -67,16 +86,22 @@ export class Polygon {
   }
 
   // Check if a ray intersects with a line segment.
-  rayIntersectsSegment(p: Point, r: Point, p1: Point, p2: Point): boolean {
-    // Check if the ray is parallel to the line segment
-    if ((r.y - p.y) / (r.x - p.x) === (p2.y - p1.y) / (p2.x - p1.x)) {
+  rayIntersectsSegment(p: Point, t: Point, q: Point, u: Point): boolean {
+    let m1 = p.slope(t);
+    let m2 = q.slope(u);
+    let b1 = p.offset(t);
+    let b2 = q.offset(u);
+
+    if (m1 === m2) {
       return false;
     }
-    // Check if the ray intersects with the line segment
-    const t = (p1.x + (p2.y - p1.y) * (r.x - p.x) / (r.y - p.y) - p.x) / (p2.x - p1.x);
-    console.log("ris", t);
 
-    return t >= 0 && t <= 1;
+    let x = (b1 - b2) / (m2 - m1);
+    let y = (b1 * m2 - b2 * m1) / (m2 - m1);
+    let i = x / p.x;
+    let j = y / p.y;
+
+    return (j >= 0 && j <= 1) && (i >= 0 && i <= 1);
   }
 
   boundingRect() {
