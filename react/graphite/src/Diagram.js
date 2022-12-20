@@ -1,11 +1,12 @@
 import PropTypes from "prop-types";
-import React, {useRef} from 'react';
+import React from 'react';
 import drawImageExtents from "./drawImage";
 import {Point, Polygon, Rectangle, biggestIntersectingFraction} from "./Polygon";
 import Modal from './Modal';
-import {midPointBtw, Coordinates} from "./Coordinates";
+import {Coordinates} from "./Coordinates";
 import * as piexif from "./piexif";
 
+const DEBUG = true;
 
 const canvasStyle = {
   display: "block",
@@ -25,17 +26,6 @@ function debounce(func, timeout) {
     timer = setTimeout(() => { func.apply(this, args); }, timeout);
   };
 }
-
-const modalStyle = {
-  content: {
-    top: '50%',
-    left: '50%',
-    right: 'auto',
-    bottom: 'auto',
-    marginRight: '-50%',
-    transform: 'translate(-50%, -50%)',
-  },
-};
 
 export default class Diagram extends React.Component {
   static propTypes = {
@@ -139,9 +129,6 @@ export default class Diagram extends React.Component {
     });
   }
 
-  componentDidUpdate() {
-  }
-
   saveData = () => {
     let blob = {"boxes": []};
     for (let i = 0; i < this.boxes.length; i++) {
@@ -172,7 +159,7 @@ export default class Diagram extends React.Component {
     // Do some horrific DOM manipulation. Seriously look away, this is gross.
     const anchor = document.createElement('a');
     anchor.href = newSrc;
-    anchor.download = "result.jpg";
+    anchor.download = this.fileName;
     anchor.click();
   }
   
@@ -259,6 +246,7 @@ export default class Diagram extends React.Component {
         ctx.fillStyle = 'rgba(238, 144, 238, 0.3)';
       }
       let box = this.coords.to_display_poly(this.boxes[i]);
+
       ctx.beginPath();
       let firstPoint = box.vertices[0];
       ctx.moveTo(firstPoint.x, firstPoint.y);
@@ -269,10 +257,19 @@ export default class Diagram extends React.Component {
       ctx.closePath();
       ctx.fill();
     }
+
+    if (this.displayPoint) {
+      ctx.strokeStyle = 'black';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(this.displayPoint.x, this.displayPoint.y);
+      ctx.stroke();
+    }
   };
 
   handleFileChange = (event) => {
     const file = event.target.files[0];
+    this.fileName = file.name;
     const reader = new FileReader();
     const parent = this;
 
@@ -397,9 +394,13 @@ export default class Diagram extends React.Component {
 
     if (this.mode === "draw") {
       let dist = this.lastPoint.manhattanDistance(point);
+      if (DEBUG) {
+        this.displayPoint = this.coords.to_display_point(point);
+      }
       if (dist < 3) {
         this.boxes.pop();
         let selected_candidates = [];
+
         for (let i = 0; i < this.boxes.length; i++) {
           const box = this.boxes[i];
           if (box.contains(point)) {
@@ -437,6 +438,7 @@ export default class Diagram extends React.Component {
         <div>
           <input type="file" ref={this.fileInput} onChange={this.handleFileChange} />
           <button onClick={this.saveData}>Save</button>
+          <div> Use "Enter" to set text. Use "f" to toggle to a polygon. Use "a" to add points to a polygon.</div>
           {this.state.modalIsVisible &&
             <Modal enteringText={this.state.enteringText} setBoxText={this.updateBoxText} />}
         </div>

@@ -1,4 +1,4 @@
-import {useCallback, useState, useRef} from 'react';
+import {useState} from 'react';
 
 
 export default function Modal(props) {
@@ -21,11 +21,17 @@ export default function Modal(props) {
         left: '50%',
         transform: 'translate(-50%, -50%)',
         zIndex: 999,
+        width: 400,
         background: 'gray',
         padding: '20px',
       }}>
       <form onSubmit={enterText}>
-        <input type="text" value={text} onChange={updateText} autoFocus />
+        <textarea
+          type="text"
+          value={text}
+          onChange={updateText}
+          style={{width: "360px", padding: "20px"}}
+          autoFocus />
         <input type="submit" value="Submit" />
       </form>
     </div>

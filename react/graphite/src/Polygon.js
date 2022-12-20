@@ -66,48 +66,85 @@ export class Polygon {
   // This method determines if a point is inside the polygon using a ray
   // casting algorithm.
   contains(point: Point): boolean {
+    let bounding = this.boundingRect();
+    if (!bounding.contains(point)) {
+      return false;
+    }
+
     // Create a ray from the point in question to any point outside the
     // polygon. We have arbitrarily chosen the origin.
     const ray = new Point(0, 0);
-
     let intersections = 0;
+
     for (let i = 0; i < this.vertices.length; i++) {
       const p1 = this.vertices[i];
       const p2 = this.vertices[(i + 1) % this.vertices.length];
 
       // Check if the ray intersects with the current edge
       if (this.rayIntersectsSegment(point, ray, p1, p2)) {
-        intersections++;
+        intersections += 1;
       }
     }
-    // If the number of intersections is odd, the point is inside the polygon
-    return intersections % 2 === 1;
+    return (intersections % 2) === 1;
   }
 
   // Check if a ray intersects with a line segment.
   rayIntersectsSegment(p: Point, t: Point, q: Point, u: Point): boolean {
     let m1 = p.slope(t);
     let m2 = q.slope(u);
+
+    if (m1 === Number.POSITIVE_INFINITY ||
+        m1 === Number.NEGATIVE_INFINITY ||
+        m2 === Number.NEGATIVE_INFINITY ||
+        m2 === Number.POSITIVE_INFINITY) {
+      // Slope is straight up and down, check that the y crosses through it.
+      if (q.y > u.y) {
+        return p.y >= u.y && p.y <= q.y;
+      } else {
+        return p.y >= q.y && p.y <= u.y;
+      }
+    }
+
     let b1 = p.offset(t);
     let b2 = q.offset(u);
 
+    // Parallel lines cannot cross. (Also this divides by 0)
     if (m1 === m2) {
       return false;
     }
 
     let x = (b1 - b2) / (m2 - m1);
     let y = (b1 * m2 - b2 * m1) / (m2 - m1);
-    let i = x / p.x;
-    let j = y / p.y;
+    let x0, x1;
 
-    return (j >= 0 && j <= 1) && (i >= 0 && i <= 1);
+    // Point is on the line between segments.
+    if (q.x > u.x) {
+      x0 = u.x;
+      x1 = q.x;
+    } else {
+      x0 = q.x;
+      x1 = u.x;
+    }
+
+    let onSegment;
+    if (m2 < 0) {
+      let y0 = m2 * x1 + b2;
+      let y1 = m2 * x0 + b2;
+      onSegment = ((x >= x0 && x <= x1) && (y >= y0 && y <= y1));
+    } else {
+      let y0 = m2 * x0 + b2;
+      let y1 = m2 * x1 + b2;
+      onSegment = ((x >= x0 && x <= x1) && (y >= y0 && y <= y1));
+    }
+    let onRay = ((x / p.x) < 1 && (y / p.y) < 1);
+    return onSegment && onRay;
   }
 
   boundingRect() {
-    let xmin = this.vertices[0];
-    let xmax = this.vertices[0];
-    let ymin = this.vertices[0];
-    let ymax = this.vertices[0];
+    let xmin = this.vertices[0].x;
+    let xmax = this.vertices[0].x;
+    let ymin = this.vertices[0].y;
+    let ymax = this.vertices[0].y;
     
     for (let i = 1; i < this.vertices.length; i++) {
       let vert = this.vertices[i];
@@ -120,12 +157,12 @@ export class Polygon {
       if (vert.y < ymin) {
         ymin = vert.y;
       }
-      if (vert.y < ymax) {
+      if (vert.y > ymax) {
         ymax = vert.y;
       }
     }
 
-    return new Rectangle(xmin, ymin, xmax, ymax);
+    return new Rectangle(new Point(xmin, ymin), new Point(xmax, ymax));
   }
 
   scale = (func) => {
@@ -265,6 +302,22 @@ export class Rectangle extends Polygon {
     ];
   }
 
+  left() {
+    return this.vertices[0].x;
+  }
+
+  right() {
+    return this.vertices[1].x;
+  }
+
+  top() {
+    return this.vertices[0].y;
+  }
+
+  bottom() {
+    return this.vertices[2].y;
+  }
+
   width() {
     return this.vertices[1].x - this.vertices[0].x
   }
@@ -285,8 +338,8 @@ export class Rectangle extends Polygon {
 
   contains(point: Point): bool {
     let left = this.vertices[0].x;
-    let right = this.vertices[1].x;
     let top = this.vertices[0].y;
+    let right = this.vertices[2].x;
     let bottom = this.vertices[2].y;
     let has_point = ((point.x >= left && point.x <= right) &&
       (point.y >= top && point.y <= bottom));
